@@ -1,0 +1,345 @@
+# demo-ai-assistant
+
+<!-- BEGIN: first-run onboarding (Claude: bu bloğu OKU, çalıştır, sonra SİL. Tek seferlik.) -->
+
+> **🤖 Claude için DIRECTIVE — bu mesajı gördüğün anda yap:**
+>
+> Bu blok hâlâ buradaysa kullanıcı yeni bir proje açtı ve wizard hiç çalışmadı. Kullanıcı sana **HERHANGİ BİR şey** yazdığı anda (selam, merhaba, hi, hello, ne yapayım, vs.) — **açıklama yapma, "neyi yapayım?" sorma, ön-mesaj verme**. Direkt aşağıdaki **Phase 0 — Dil** sorusuyla başla. Tek tek soru sor, hepsi bittiğinde aşağıdaki Phase 4 son adımları uygula. En son bu BEGIN/END blok'unu kendin sil ve dosyayı kaydet.
+
+## First-run onboarding
+
+Bu bölüm sadece ilk session'da çalışır — proje boş, beraber dolduracağız. **TEK TEK soru sor, cevap gelmeden bir sonrakine geçme.**
+
+**Önemli — kullanıcı kod bilmiyor olabilir.** Her sorunun altındaki **"Bilmiyor musun?"** safety-net cevabını oku, kullanıcı anlamazsa o cevabı kabul et. **"atla" / "skip" / "bilmiyorum"** = safety-net uygula, asla sıkıştırma.
+
+**Tone:** Sıcak, jargon yok. Teknik terim çıkarsa parantez içinde 3 kelimeyle açıkla (örn: *"API key (servisin sana verdiği şifre)"*). Casual input → opinionated output.
+
+### Phase 0 — Dil
+
+**İlk soru — diğerleri buna göre:**
+
+> "Hangi dilde devam edelim? / Which language do you prefer?
+> 1) Türkçe
+> 2) English"
+
+Cevaba göre tüm sonraki sorular **o dilde** sor. Aşağıdaki tüm prompt'ların hem TR hem EN versiyonu var — TR seçilirse TR olanı kullan, EN seçilirse İngilizceye çevirip sor (örnek formatları aynı şekilde çevir). Default = Türkçe.
+
+### Phase 0.1 — Hız modu (opsiyonel, hemen Phase 0'dan sonra sor)
+
+> *"Wizard'ın **tam mod** (10 soru kategori dahil, ~5 dk) veya **hızlı mod** (3-4 soru, ~1 dk) versiyonunu kullanmak ister misin?
+> - **Tam**: kategori / ne yapacak / kim kullanacak / niye / başarı tanımı / verification / dosya yapısı / risk / hızlı şey / 1.iterasyon
+> - **Hızlı**: kategori¹ / ne yapacak / nasıl test edersin / sıra dışı bir şey var mı? — gerisi default + sonra her zaman değiştirilebilir
+>
+> ¹ Kategori setup_starter veya site/start prompt'unda zaten cevaplandıysa atlanır → hızlı mod 3 soruya iner.
+>
+> Cevap: **t** / **h** (default = tam)"*
+
+**Cevap "h" ise:** sadece 4 soruyu sor (Phase 0.3 kategori, Phase 1 madde 1, Phase 2 madde 5, Phase 4 madde 9 → kategoriden sonra Phase 1.5 / 4 başlığı altında ardışık sor). Phase 0.5 (multi-agent gate) yine consultative çalışır — single-agent default ile cevap. Phase 0.7 (risk seviyesi) atlanır, default kategoriye göre belirlenir (HIGH-RISK = 3, otomasyon = 2, diğer = 1). Geri kalan sorular için sensible default doldur:
+- Kim kullanacak: "sadece ben"
+- Niye şimdi: "deniyorum"
+- Stack/dil: kit seçimi belirler
+- Hata + drift: default skill'ler
+
+**Cevap "t" ise:** tam akış: **Phase 0.3 → 0.5 → 0.7 → 1 → 2 → 3 → 3.5 → 4**.
+
+Hızlı modu Phase 0.7 atladığı için: kullanıcı sonradan canlıya çıkmak isterse, `02-memory/decisions-log.md`'a *"Risk kategorisi: <default> — hızlı modla kuruldu, prod'a geçişte Phase 0.7 sorularına dön"* notu yaz.
+
+### Phase 0.3 — Proje kategorisi (domain bazlı)
+
+**Önce kontrol et — kategori zaten cevaplandı mı?** `02-memory/category/` klasöründe `01-automation.md`, `06-finance.md`, vs. gibi **tek bir** dosya varsa: setup_starter.py veya site/start prompt-paste flow'u kategoriyi zaten sordu. Bu durumda kullanıcıya **soruyu tekrar sorma**, sadece tek satır teyit et:
+> *"Setup'ta `<kategori-adı>` kategorisi seçilmiş, devam ediyorum. Değiştirmek istersen söyle."*
+> Sonra aşağıdaki "Cevaba göre yap" adımlarına geç (zaten dosya yüklü; sadece risk profili + advisor inject).
+
+**Klasör boşsa veya birden fazla kategori dosyası varsa** (general / wizard runtime'ında karar) — soruyu sor:
+
+> *"Bu projeyi en iyi hangi kategori tarif eder?
+>
+>  1) **🔁 Otomasyon & workflow** — mesaj cevap, scrape, schedule, takvim/mail
+>  2) **📝 İçerik & medya** — blog, podcast, video, newsletter, sosyal
+>  3) **💻 Yazılım & ürün** — SaaS MVP, app, kütüphane, dev tool
+>  4) **🎮 Oyun geliştirme** — game prototype, mechanic, level design
+>  5) **📊 Veri & analiz** — dashboard, BI, ETL, research, viz
+>  6) **🧮 Finans & muhasebe & audit** — bookkeeping, P&L, vergi, denetim *(HIGH RISK)*
+>  7) **🏛 Hukuk & uyumluluk** — sözleşme, regülasyon, compliance *(HIGH RISK)*
+>  8) **📈 Pazarlama & satış** — copy, campaign, SEO, lead gen
+>  9) **🎓 Eğitim & araştırma** — kurs, paper, tutorial
+> 10) **🧘 Kişisel & verimlilik** — GTD, journal, kişisel asistan
+>  -) **Hiçbiri yakın değil → 'genel'** — kategori bazlı boilerplate kopyalanmaz, vanilla kurulum"*
+
+**Bilmiyor musun?** → kit cevabına göre default:
+- AI Asistan kit → **(1) Otomasyon**
+- İçerik Takip kit → **(2) İçerik & medya** (intel pipeline ekstra)
+- Boş Sayfa → kullanıcı seçer veya 'genel'
+
+Cevaba göre yap:
+1. **`02-memory/category/<NN>-<slug>.md` dosyasını yükle** (örn: `06-finance.md`).
+2. Diğer kategori dosyalarını kopyalama (setup_starter zaten kit-aware filtre yapıyor — eğer wizard runtime'ında varsa, bu kategori dışındakileri sil veya `_archive/` taşı).
+3. **Risk profilini Phase 0.7'ye geçir:**
+   - Kategori 6 (Finans) veya 7 (Hukuk) → Phase 0.7 default = **(3) Evet, gerçek müşteri/ödeme/canlı API**. ZORUNLU production doctrine docs ekstra kopyalanır (auto-mode-classifier, red-team, multi-grader-eval).
+   - Kategori 1 (Otomasyon) → Phase 0.7 default = **(2) Karışık**.
+   - Diğerleri → Phase 0.7 default = **(1) Hayır, lokal**.
+4. **Kategori-spesifik tavsiye 1-paragraf** Phase 1 başına inject (`02-memory/category/<file>.md`'nin "Doctrine emphasis" + "Sample first-task prompt" bölümlerinden özet).
+
+**Genel** seçildiyse kategori dosyası kopyalanmaz, default akışla devam.
+
+### Phase 0.5 — Tek mi çoklu ajan? (CONSULTATIVE — soru değil, danışman)
+
+**Bu phase ASLA "1 mi 2 mi?" şeklinde sorma.** Kullanıcı çoğunlukla bilmiyor; binary soru = yanlış cevap. Onun yerine **danışmanlık yap**:
+
+#### Adım 1 — Use case'i çıkar
+
+Phase 1'in 1. sorusunu öne çek: *"Bu proje tek cümlede ne yapacak?"*. Cevabı oku, aşağıdaki ÜÇ kategorinin hangisine uyduğunu belirle:
+
+| Kategori | Belirti | Cevap |
+|---|---|---|
+| **A — Single-agent (DEFAULT, %85 case)** | Tek bir akış: "müşteri mesajına cevap", "YouTube özet", "tek site fiyat takibi", "newsletter draft" | Tek ajan yeterli, atla |
+| **B — Sequential pipeline** | Birden fazla adım ama **sırayla**: "scrape → özet → email gönder", "fatura oku → kategorize et → kayıt et" | Tek ajan + tools yeter, atla |
+| **C — True multi-agent (NADIR, %5-15)** | Eş zamanlı paralel iş: "9 hesap aynı anda farklı ranklarda bahis koyuyor", "5 farklı domain'de paralel scraper" | Multi-agent gerekli, devam |
+
+#### Adım 2 — Eğer C kategorisi göründüyse, KULLANICIYA NET TEKLIF YAP
+
+```
+Senin tarif ettiğin proje multi-agent gibi duruyor (sebep: <şu cümlesi>).
+Bu, daha karmaşık ve bakımı zor bir yapı. İki yol var:
+
+  A) Tek ajan + sıralı çalıştırma
+     - Daha basit, debug kolay
+     - Yavaş ama predictable
+     - Genelde önce bunu kur, gerçekten yetersiz olunca B'ye geç
+
+  B) Multi-agent / orchestrator pattern
+     - Paralel hız
+     - Race condition, data contract, circuit breaker — distributed-systems
+     - 6 zorunlu pattern var (`02-memory/orchestrator-safety.md`)
+     - 3-5x daha fazla iş, debug zor
+
+Tavsiyem: önce A ile başla, ölç, gerçekten paralel hız gerekirse B'ye geç.
+Sen ne dersin? (a / b / emin değilim)
+```
+
+- Cevap **a** veya **emin değilim** → single-agent, atla.
+- Cevap **b** → multi-agent zincirini aktive et:
+  1. **Önce dosya kontrol:** `02-memory/orchestrator-safety.md` ve `02-memory/doctrine/` klasörü var mı? Setup_starter assistant/intel kit ile çalıştıysa bu dosyalar diskte **yok** (production doctrine docs = blank kit + HIGH-RISK kategorilere özel). Yoksa kullanıcıya bildir + dosyaları template repo'sundan kopyala:
+     ```bash
+     # Eksik production doctrine docs'u kopyala (multi-agent için zorunlu)
+     curl -fsSL https://raw.githubusercontent.com/emrenuhoglu-tech/layermark-starter/main/template/02-memory/orchestrator-safety.md \
+       -o 02-memory/orchestrator-safety.md
+     # 5 doctrine doc:
+     for f in auto-mode-classifier.md brain-hands-decoupling.md eval-awareness.md multi-grader-eval.md red-team-primitive.md; do
+       mkdir -p 02-memory/doctrine
+       curl -fsSL "https://raw.githubusercontent.com/emrenuhoglu-tech/layermark-starter/main/template/02-memory/doctrine/$f" \
+         -o "02-memory/doctrine/$f"
+     done
+     ```
+     Veya kullanıcıdan `git clone https://github.com/emrenuhoglu-tech/layermark-starter /tmp/lm` yapmasını iste, dosyaları oradan kopyala.
+  2. **Sonra:** `02-memory/orchestrator-safety.md` oku, 6 pattern'i ÖZETLE, kullanıcı anladığından emin ol, sonra Phase 1'e devam.
+
+#### Adım 3 — Hibrit kategorisi varsa AÇIK SÖYLE
+
+Eğer kullanıcı "ben hem A hem B düşünüyorum" derse:
+> *"Çoğu durumda A yeter. Multi-agent gereken use-case'in 4 işareti: (1) gerçekten paralel hız zorunlu, (2) ajanlar farklı persona/hesap kullanıyor, (3) state'i koordine etmek lazım, (4) tek ajanla denedin yetmedi. 4'ünden 3'ü tutmuyorsa A başla."*
+
+#### Hard rules
+
+- ❌ Default'u multi-agent yapma — pre-mature complexity
+- ❌ "1 mi 2 mi?" binary soru — kullanıcı bilmiyor, kötü cevap verir
+- ✅ Use case'den çıkar, kategoriye yerleştir, **gerekçeli teklif** yap
+- ✅ Şüpheliyken **A öner** (Pocock: "Simplicity first")
+
+### Phase 0.7 — Risk seviyesi (HIGH-RISK kategori VEYA çoklu ajan VEYA otonom action varsa)
+
+Şu üç koşuldan **biri** tutarsa Phase 0.7'yi tetikle:
+1. Phase 0.3'te kategori **6 (Finans)** veya **7 (Hukuk)** seçildi (HIGH-RISK kategoriler — production doctrine zorunlu, kullanıcıya sebep söyle)
+2. Phase 0.5'te kategori **b** (multi-agent) çıktı
+3. Phase 1'de "agent yan etki alacak — ödeme, deploy, mesaj gönderme" sinyali aldın
+
+Tek soru sor (jargon kullanma):
+
+> *"Bu proje canlıya bir şey yazacak mı? Üç senaryodan hangisi daha yakın:
+> 1) **Hayır** — sadece bilgisayarımda çalışsın, denemek için
+> 2) **Bilmiyorum / karışık** — bazı şeyler dışarıya gider ama tam üretim değil
+> 3) **Evet** — gerçek müşteri / gerçek ödeme / canlı API ile çalışacak"*
+
+**Bilmiyor musun?** → *(1)* default. En az risk.
+
+Cevaba göre (kullanıcıya teknik isim söyleme — sadece sen note al):
+- **(1) Hayır → "lokal" mod**: Default skill'ler yeter. `agent-approval` skill'i sadece riskli işlerde devreye girer (silme, dış mesaj gönderme).
+- **(2) Karışık → "sandbox" mod**: `02-memory/doctrine/auto-mode-classifier.md` oku, allow-list customize et. `agent-approval` daha sık devrede. `verify-agent-output` her milestone'da.
+- **(3) Evet → "production" mod**: TÜM production doctrine'leri (madde 16-20) zorunlu. `02-memory/doctrine/red-team-primitive.md` pre-deploy gate. `02-memory/doctrine/multi-grader-eval.md` CI gate. Network isolation eval sırasında.
+
+Cevabı `02-memory/decisions-log.md`'a yaz, başlık `## Risk kategorisi` altında.
+
+### Phase 1 — Ne ve Niye
+
+1. **"Bu proje tek cümlede ne yapacak?"**
+   - İyi cevap örnekleri: *"Müşterilerime gelen WhatsApp mesajlarına otomatik cevap"* / *"YouTube videolarımdan günlük özet çıkar"* / *"Sitemde fiyat takibi"*.
+   - Bilmiyor musun? → *"henüz bilmiyorum, beraber bulalım"* yaz, ben yardım edeceğim.
+
+2. **"Kim kullanacak?"**
+   - Sadece sen / küçük ekip / herkese açık?
+   - Bilmiyor musun? → *"sadece ben"* — sonra değiştirebilirsin.
+
+3. **"Neden şimdi başlıyorsun? Bunu manuel yaparken seni en çok ne yoruyor?"**
+   - Bilmiyor musun? → 1 cümle yaz, mükemmel olmasına gerek yok.
+
+   **🧭 Advisor checkpoint (Phase 1 sonu — pattern recognition):**
+   Q1-Q3 cevaplarını oku. Şu üç pattern'den biri varsa, kullanıcıya 1 cümle uyarı ver:
+   - **Site scraping / web automation** (Q1'de "site fiyat takibi", "scrape", "X'ten veri çek") → *"Site scraping için anti-bot riski var (Cloudflare/captcha). Tek site OK; 5+ siteyi paralel kazıyacaksan multi-agent orchestrator gerekebilir, Phase 0.5'e dön."*
+   - **Mesaj cevaplama / chatbot** (Q1'de "WhatsApp cevap", "chatbot", "müşteri mesaj") → *"Bot tone + brand voice için tutarlılık zor. Wizard sonu bir 5-örnek cevap stili dosyası önereceğim (`02-memory/voice-samples.md`)."*
+   - **İçerik / rapor üretme** (Q1'de "rapor", "özet", "transcript", "post draft") → *"Generic LLM output zamanla 'çamur' gibi olur. Phase 2'de 'doğru' tanımı için spesifik olun — 'iyi rapor neyi içerir' soracağım, hazırlan."*
+   Sinyal yoksa Phase 2'ye geç.
+
+### Phase 2 — Başarı tanımı
+
+4. **"1 hafta sonra 'işe yaradı' demen için elinde ne olmalı?"**
+   - İyi cevap örnekleri: *"Günde 5 müşteriye otomatik cevap gitmiş olsun"* / *"WhatsApp'ıma her sabah özet düşsün"* / *"Bir link/site açabileyim"*.
+   - Bilmiyor musun? → *"çalışan basit bir versiyon görmek"*.
+
+5. **"Bu sonucun doğru olduğunu nasıl anlarsın?"**
+   - İyi cevap örnekleri: *"5 örneği elle kontrol ederim"* / *"WhatsApp'ıma gelen mesaja kendim bakarım"* / *"raporu okuyup mantıklı mı diye karar veririm"*.
+   - Bilmiyor musun? → *"elle 3-5 sonucu kendim kontrol edeceğim"*.
+
+   **🧭 Advisor checkpoint (Phase 2 sonu — opsiyonel sun, kullanıcı isterse):**
+   Eğer Q5 cevabı *"elle bakarım"* / *"sezgiyle"* / *"deneyerek anlarım"* gibiyse, kullanıcıya tek-cümlelik teklif yap:
+   > *"Elle kontrol başlangıç için iyi. İlk 1-2 hafta sonra elle yormaya başlarsa, otomatik kontrol için `02-memory/doctrine/multi-grader-eval.md` (varsa) öneririm — outcome (deterministic) + transcript (model) + human (kalibrasyon). Şimdi yapma, ama signal görünce hatırla. Devam edelim mi?"*
+   Kullanıcı *"evet/devam"* derse atla; soru sorarsa cevapla; *"ekleyelim şimdi"* derse Phase 4 sonuna `## Eval kurulumu — sıradaki iş` notu ekle.
+
+### Phase 3 — Bağlantılar ve sınırlar
+
+6. **"Bu proje hangi araç ya da servisleri kullanacak?"**
+   - Açıklama: ChatGPT, WhatsApp, Gmail, Excel — hangileri lazım?
+   - İyi cevap örnekleri: *"OpenAI ChatGPT API'si"* / *"WhatsApp + Google Sheets"* / *"sadece Python, dış bağlantı yok"*.
+   - Bilmiyor musun? → *"şimdilik bilmiyorum, sonra ekleriz"* — temiz başlatırız, ihtiyaç çıkınca eklersin.
+
+7. **"Bağlanacağı servisler için 'API key' (yani servisin sana verdiği şifre) lazım mı?"**
+   - Açıklama: API key = OpenAI, Twitter, vs. seni tanımak için verdiği gizli kod. Şimdi yazma, sadece adlarını söyle.
+   - İyi cevap örnekleri: *"OpenAI ve Twitter"* / *"Gmail için Google girişi"* / *"hiçbiri"*.
+   - Bilmiyor musun? → *"şu an emin değilim"* → boş bırak, lazım olunca uyarırım.
+
+8. **"Çalışırken dikkat etmesi gereken bir şart var mı?"**
+   - Açıklama örnekleri: *"Türkiye'den bağlanmalı"* (bazı sitelerde gerekli), *"her sabah kendi başına çalışsın"*, *"ücretsiz limit aşmasın"*, *"belirli bir saatte"*.
+   - Bilmiyor musun? → *"yok"* — sonra çıkarsa CLAUDE.md'ye ekleriz.
+
+   **🧭 Advisor checkpoint (Phase 3 sonu — kritik signal'e bak):**
+   Q6, Q7, Q8 cevaplarında şu sinyalleri ara ve gör:
+   - **Ödeme / parasal işlem söz konusu mu?** (Q6 veya Q8'de "Stripe", "ödeme", "kredi kartı", "fatura"...) → Tek cümle: *"Ödeme akışları için `agent-approval` skill'i otomatik devreye girer (sen istemesen de). Risk/blast radius görmeden agent ödeme yapmaz."*
+   - **Dış mesaj gönderme var mı?** (Q6'da "WhatsApp", "Email gönder", "Twitter post"...) → *"Dış mesaj gönderme `agent-approval` gate'inden geçer — agent draft hazırlar, sen onaylarsın, sonra gider."*
+   - **Birden çok 3rd-party API var mı?** (Q6'da 3+ servis) → *"3+ API var; hata için per-API circuit breaker doctrine'i lazım olabilir, ama Phase 1'e sığmıyorsa atlayalım, lazım olunca eklersin."*
+   Sinyal yoksa atla, kullanıcıyı yorma.
+
+### Phase 3.5 — Yapı tipi (kritik — folder layout buna göre)
+
+9a. **"Bu proje yapısı hangisine uyuyor?"**
+   1. **Tek-iş (a)** — bir tane ana çıktı/deliverable, hepsi aynı yöne akıyor (örn: tek bir bot, tek bir rapor üreten araç)
+   2. **Çoklu-konu (b)** — birden fazla bağımsız iş bir arada (örn: hem müşteri X için CRM otomasyon, hem Y için web scraping; her biri kendi klasör)
+   3. **Paralel-track (c)** — aynı konuda paralel iş kolları (örn: ürün geliştirme + pazarlama + müşteri desteği aynı çatı altında)
+   - Bilmiyor musun? → kit varsayılanı uygula: AI Asistan / Boş Sayfa = (a), İçerik Takip = (b).
+
+   **Çıktı:** Q9a = (b) veya (c) ise folder yapısında numbered klasörler öner (örn: `10-customer-x/`, `20-customer-y/`, `30-internal/`). (a) ise düz yapı (`scripts/main.py`).
+
+   **Naming convention (Q9a = b veya c için):** dosya/klasör isimlendirme `<YYMM>.<XX>-<slug>` formatı — örn: `2604.21-acme-rfp/` (Nisan 2026, workspace-wide 21. iş, slug "acme-rfp"). XX kategorisinden bağımsız workspace-wide unique. Audit trail için işin baştaki kategorisi değişse bile XX değişmez.
+
+### Phase 4 — İlk adım
+
+9b. **"İlk kod dosyasını nereye yazalım?"**
+   - Q9a cevabına göre default öner:
+     - (a) Tek-iş: Python → `scripts/main.py`, Node → `src/index.ts`, Web → `src/App.tsx`
+     - (b) Çoklu-konu: `<numbered-folder>/<topic>/main.py`, kullanıcı topic adını verir
+     - (c) Paralel-track: `<track>/main.py` formatı, track adını sor
+   - Bilmiyor musun? → *"Sen karar ver"* — ben karar veririm.
+
+   **🧭 Advisor checkpoint (Phase 4 sonu — workflow setup teklifi):**
+   Tüm cevaplar elinde. Kullanıcıya tek cümle son teklif:
+   > *"Sıradaki ilk session için 2 öneri: (1) `/grill-me` skill'iyle ilk feature'ı tartışıp implement et — daha az ileri-geri olur. (2) İlk hafta sonunda `/project-advisor` çağır — wizard'da koyduğumuz doctrine'lerin gerçekten çalıştığını görelim, yoksa CLAUDE.md'yi sadeleştirelim. Anladın mı? Devam edelim."*
+   Bilgilendirme — onay aramaz, sadece "Devam edelim" der ve Phase sonraki adıma geçer.
+
+### Cevaplar gelince yap (sırayla — tek commit yap, her adımı diff'i göstererek)
+
+1. **`README.md`:** description'ı Q1 ile değiştir; `## Goal` section ekle (Q4 + Q5).
+2. **`CLAUDE.md`:** üste (bu bloğun yerine) `## Project context` ekle — what (Q1) / who (Q2) / why (Q3) / success (Q4) / verification (Q5). Bu blok permanent kalır.
+3. **`CLAUDE.md` `## Constraints` (Q8 boş değilse):** her constraint bir bullet.
+4. **`requirements.txt` / `package.json` (Q6):** sadece açık paketler. **Version pinleme yapma** — kullanıcı ilk `pip install` / `npm install` sonrası freeze etsin.
+5. **`.env.example` (Q7):** her key bir satır, comment'li, değersiz. Format: `# ANTHROPIC_API_KEY=`
+6. **İlk skeleton dosya (Q9):** entry stub + `# Tier-1 verification: <Q5'in cevabı>` yorumu üstte. 5-10 satırı geçme.
+7. **Bu "First-run onboarding" bloğunu CLAUDE.md'den sil** (`<!-- BEGIN ... END -->` arası dahil).
+8. **Tek commit at:** `chore: complete first-run onboarding`. Diff'i göster, kullanıcı onayladıktan sonra commit.
+
+### Son mesaj
+
+"Onboarding tamam. Özet: <Q1 cevabı>. Hedef: <Q4 cevabı>. Doğrulama: <Q5 cevabı>. Şimdi ilk gerçek iş için ne yapacağız?" diye sor.
+
+### Guard rails (wizard sırasında YAPMA)
+
+- ❌ `.claude/skills/` altına slash command **yarama** — daha 2-3x/gün pattern oluşmadı (inner-loop test fail).
+- ❌ `knowledge/` doldurma — Q'larda raw source çıkmadı.
+- ❌ Test framework (`pytest`, `vitest`) kurma — Q5 manuel ise yeter.
+- ❌ Dockerfile / CI yaz — kullanıcı istemedi.
+- ❌ Skeleton dosyaya iş mantığı koyma — sadece stub + verification comment.
+- ❌ Plan mode önerme — wizard zaten plan'in kendisi.
+
+<!-- END: first-run onboarding -->
+
+## Doctrine
+
+20 doctrine — Pocock + AI Engineer + Anthropic Engineering distilled. Tam katalog ve detay: [/docs/doctrines](https://emrenuhoglu-tech.github.io/layermark-starter/docs/doctrines/). Sıralama README ile birebir uyumlu (1-7 çekirdek, 8-14 skill+workflow, 15-20 production opt-in).
+
+### Çekirdek (1-7)
+
+- **1. Grill before build.** Non-trivial iş başında `.claude/skills/grill-me.md` çalıştır → shared understanding. Plan-mode bunun yanında, alternatifi değil.
+- **2. Smart zone (~100K).** LLM gerçekte beyan edilen context window'dan bağımsız ~100K token sonrası dumb zone'a düşer (attention quadratic scaling). İş'i smart zone'a sığacak boyutta kes.
+- **3. Memento, compact değil.** Compact yerine fresh window. Repeated compact = sediment (eski/stale bilgi birikimi). Stuck'ken yeni session aç, problemi sıfırdan tarif et. **Memento mental model + suspend/resume implementation:** grill → `/suspend` (checkpoint yaz) → next session `/resume` (checkpoint oku, kaldığın yeri kavra). İki ayrı şey aynı amaca: context'i temiz tut.
+- **4. Surgical changes.** Sadece istenen satırı değiştir. Adjacent kodu refactor etme. Kırılmamış şeyi düzeltme.
+- **5. Simplicity first.** En kısa kod. Speculative abstraction yok. 200 satır 50'ye iniyorsa yaz baştan.
+- **6. Verification.** Her non-trivial iş "nasıl doğrularız?" ile bitsin. Feedback loop olmadan output güvenilmez.
+- **7. Minimum permissions.** Tool/file/key erişimi gerektiği kadar. Erişim verirsen kullanılacaktır.
+
+### Skill + workflow (8-14)
+
+- **8. Inner-loop test.** 2-3x/gün + aynı pattern + preloaded context yardım eder → skill yap (`.claude/skills/`). Yoksa yapma.
+- **9. Rules emerge.** Pre-load "50 kuralın directory'si" anti-pattern. Ajan off-rails → kural yaz (CLAUDE.md, hook, lint, ya da reviewer-agent). Skill inner-loop test'i kurallara da uygulanır: 2-3x/gün + aynı pattern + preloaded context yardım eder → kural ekle, yoksa ekleme.
+- **10. Never `/init`.** `claude /init` çalıştırma; auto-generated CLAUDE.md sil. CLAUDE.md tiny kalsın (env + output style). Instruction budget ~300-500 — `package.json`'dan keşfedilebilir şeyleri buraya yazma.
+- **11. Hooks > prompt negatives.** "Use X not Y" / "never run npm" gibi deterministic kurallar `pre-tool-use` hook + `exit 2` olsun, CLAUDE.md'de değil. Prompt budget yakmaz, gerçekten enforce eder. **Örnek (Pocock):** `npm` engelle istiyorsun → `~/.claude/hooks/block-npm.sh`: `[[ "$TOOL_NAME" == "Bash" && "$TOOL_INPUT" =~ npm ]] && { echo "use pnpm"; exit 2; }`. Hooks **enforced**, prompts **probabilistic**.
+- **12. Concise + unresolved.** Output stili: extremely concise, gramer feda et. Her plan sonunda unresolved questions listele (varsa).
+- **13. Anti-hallucination — use your search tool.** Training cutoff sonrası API/library/syntax hallucinate edilir. Extrinsic bilgi gerektiren her işte prompt'a **literal olarak** ekle: *"use your search tool, then look at existing implementations of X — load them into context before writing new code."* Tool call'a zorla; "muhtemelen şöyle çalışır" tahmin = yanlış cevap. Mevcut codebase varsa onu okumaya zorla, yeni yazmadan önce. Bu kural tek başına en yüksek leverage'lı anti-hallucination move'u — frontier model olsa bile.
+- **14. Bitter Lesson.** Modele karşı bahis yapma. 6 ay sonra senin custom scaffold'un model'in feature'ı olmuş olacak.
+
+### Production agent (opt-in, 15-20)
+
+Sadece HIGH-RISK kategori (finans, hukuk) VEYA Phase 0.5'te multi-agent VEYA Phase 0.7'de "Evet, canlı" cevabı verdiysen aktif. Diğer durumda single-shot kullanıcı için cognitive overhead — atla.
+
+- **15. Orchestrator-only multi-agent.** Multi-agent setup'larda mutable state'i sadece orchestrator yazar; ajanlar birbirini çağırmaz. Immutable + versioned events, data contracts at handoff (pydantic-validated), per-agent circuit breaker, saga `execute()`/`compensate()`. Detay: `02-memory/orchestrator-safety.md`. Şüpheliyken **single-agent** ile başla — Pocock "Simplicity first" + Karpathy "don't bet against the model".
+- **16. Auto-mode classifier customization.** Claude Code'un "auto mode" iki katmanlı savunması (input prompt-injection probe + output transcript classifier) domain-spesifik tuning ister — generic 17% FNR overeager actions her proje için kabul edilebilir değil. Block list (yasak komutlar/keyword'ler), allow exceptions (proje domain endpoint'leri), trust boundary (input vs output). Multi-agent iseniz bu doctrine **şart**, opsiyonel değil. Detay: Anthropic Engineering "Claude Code auto mode" 2026-05 + `02-memory/doctrine/auto-mode-classifier.md`.
+- **17. Brain / hands / session decoupling.** Tool execution `execute(name, input) → result` interface'i arkasına gizle. Brain (orchestrator + prompt) tool modüllerini direkt import etmesin. Sonuç: tool hot-swap mümkün, harness restart yok; yeni provider/site/API eklenince brain kodu değişmez. Single audit trail: her `execute()` bir log entry, policy enforcement single point. Detay: `02-memory/doctrine/brain-hands-decoupling.md`.
+- **18. Multi-grader eval rubric.** Tek-skor eval yetmez. 3 kanal: outcome (deterministic 50%) + transcript (model-based 30%) + human (calibration 20%). CI'de yalnız otomatik kanallar → max 0.80, threshold 0.75. Weekly full eval 0.85. Eval-as-gate (exit code 1 → merge block). Detay: `02-memory/doctrine/multi-grader-eval.md`.
+- **19. Eval-awareness defense.** Frontier modeller benchmark'ı tanıyıp exploit edebiliyor (Anthropic Opus 4.6 BrowseComp'u XOR decryption ile çözdü). Eval suite'lerine canary string'ler embed et, transcript'te görünürse contamination tespit. Eval datasets credential gate'lı, agent prompt'larında path görünmez. Network isolation eval sırasında. Detay: `02-memory/doctrine/eval-awareness.md`.
+- **20. Red-team primitive.** Production agent için 10-prompt adversarial checklist primitive, opsiyonel feature değil. Project Vend (Anthropic 2026) — agent identity hallucination + scam riskini gösterdi. Pre-deployment gate + continuous canary (orchestrator periyodik fake-malicious payload). 100% reject = pass. Multi-agent setup'larda **şart**. Detay: `02-memory/doctrine/red-team-primitive.md`.
+
+## Task protocol
+
+Her non-trivial iş için:
+
+- **TASK START.** Başlamadan önce: scope'u 1 cümle yaz, etkilenecek dosyaları listele, tahmini effort (S/M/L). Plan yoksa `/grill-me` çağır.
+- **TASK END.** Bitince: ne değiştirildi (dosya:satır referansı), nasıl test edildi (concrete adım), bekleyen iş var mı (1 satır). Açıkça yaz: **"Memory updated: [<file1>, <file2>]"** — hangi `.md` dosyalarını güncellediysen liste. Hiçbiri güncellenmediyse "Memory updated: none" yaz, atla.
+- **TASK END auto-pass (silent).** Bitirdiğin TASK büyükse (3+ dosya değişti VEYA 200+ satır eklendi VEYA yeni feature merged) içeride sessiz bir check yap: (1) drift sinyali var mı (`02-memory/_INDEX.md` veya `README.md` outdated), (2) spagetti birikti mi (yeni file 350+ satır, deep nesting, duplikasyon). Sinyal varsa **TEK satır** uyarı: *"⚠ <X dosya 400 satır, refactor değer. /spagetti-check çağır?>"*. Sinyal yoksa sus — pat-on-back yapma.
+- **PROHIBITED.** Kullanıcı açıkça istemedikçe yapma: `git push --force`, `git reset --hard`, `rm -rf`, dependency downgrade, CI/CD modifikasyon, scope dışı refactor, başkasının dead code'unu silme.
+
+## Folder map
+
+- `.claude/agents/prompt-engineer.md` — casual istek → structured prompt; AUDIT modu doctrine ihlallerini bulur.
+- `.claude/skills/` — 14 foundational skill (repeatable workflows / slash commands). Decision tree: `.claude/skills/README.md`. Sadece gerçek pattern olunca yenisini ekle (inner-loop test).
+- `02-memory/` — proje hafızası, drift'e karşı.
+  - `category/<NN>-<slug>.md` — Phase 0.3'te seçilen domain için 5-10 pattern + risk profili + sample prompt + anti-patterns.
+  - `doctrine/` — production agent için 5 detail doc (auto-mode-classifier, brain-hands-decoupling, eval-awareness, multi-grader-eval, red-team-primitive). Sadece HIGH-RISK kategori veya blank kit'te kopyalanır.
+  - `orchestrator-safety.md` — multi-agent saga + circuit-breaker patterns. Phase 0.5'te `b` seçildiyse zorunlu.
+  - `decisions-log.md` — Phase 0.7 risk seviyesi ve sonradan değişen kararlar buraya yazılır.
+- `knowledge/` — varsa raw source + Claude'un sentezi (Karpathy 3-layer).
+
+## Stuck olunca
+
+**Memento doctrine** (D3): yeni Claude Code session aç, problemi tek paragrafta sıfırdan tarif et. Compact deneme — sediment yığar. İki temiz context aynı problemi farklı görür.
+
+**Pratik araçlar (slash command olarak):**
+- **`/yardim`** — hata mesajı yapıştır → plain-TR/EN açıklama + fix adımları. İlk başvuru.
+- **`/suspend`** — mevcut session'ı checkpoint'e kaydet (Memento operationalize). Sıradaki SOMUT adım + RESUME PROMPT bloğu üretir.
+- **`/resume`** — yeni session başlangıcında en son `/suspend` checkpoint'ini yükler, kaldığın yeri 1 satır recap'le verir.
+- **`/ne-yapayim`** — boş ekrana bakıyorsun, kafan dağınık → 4 seçenek menüsü (audit / brainstorm / skill öner / resume).

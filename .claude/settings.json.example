@@ -1,0 +1,17 @@
+{
+  "_comment": "Bu dosyayi 'settings.json' olarak yeniden adlandir. Claude Code spec'i sadece TEK 'command' field destekler (platform-auto-detect YOK) — asagidaki 'command' degerini platformuna gore SEÇ. Aktivasyon: kopyala (Windows: copy / Mac: cp), Claude Code yeni session ac.",
+  "_unix_command": "bash .claude/hooks/prompt-log.sh",
+  "_windows_command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/prompt-log.ps1",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/prompt-log.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
